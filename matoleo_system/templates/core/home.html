@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home{% endblock %}
+{% block page_title %}Home Dashboard{% endblock %}
+
+{% block content %}
+
+<div class="home-dashboard">
+  <!-- HEADER ROW -->
+  <div class="home-header-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+  <div style="flex:1 1 100%; min-width:0; max-width:100%;">
+    <h2 style="font-size:1.3rem; font-weight:800; color:var(--white); margin:0;">
+      <i class="fas fa-home" style="color:var(--accent);"></i> Welcome, {{ user.username }}
+    </h2>
+    <p style="color:rgba(255,255,255,0.5); font-size:0.7rem; margin:1px 0 0; overflow: visible; text-overflow: clip; white-space: normal; word-break: break-word;">
+      Makongo Juu SDA Church Expense and Retirement Management System
+    </p>
+  </div>
+  <div style="display:flex; gap:4px; flex-wrap:nowrap; flex-shrink:0; min-width: 150px;">
+    {% if user_role != 'First Approver' and user_role != 'Second Approver' %}
+    <a href="{% url 'expenses:create' %}" class="btn btn-accent btn-sm">
+      <i class="fas fa-plus"></i> New Expense
+    </a>
+    <a href="{% url 'retirement:create' %}" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> New Retirement
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ANNOUNCEMENT TICKER -->
+{% if ticker_announcements %}
+<div class="announcement-ticker" style="overflow-x: hidden; max-width: 100%; word-wrap: break-word;">
+  <span class="ticker-label"><i class="fas fa-bullhorn"></i> Matangazo</span>
+  <div class="ticker-content" style="overflow: hidden; min-width: 0;">
+    <span class="ticker-text" style="max-width: 100%;">
+      {% for ann in ticker_announcements %}
+        &bull; <strong>{{ ann.title }}</strong> - {{ ann.content }}
+      {% endfor %}
+    </span>
+  </div>
+</div>
+{% endif %}
+
+<!-- QUICK STATS -->
+{% if not is_approver and not is_treasurer and not is_admin %}
+<div class="row" style="margin-bottom:8px;">
+  <div class="col" style="min-width: 120px;">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i class="fas fa-wallet"></i></div>
+      <div class="stat-info">
+        <div class="stat-value" style="font-size: 1.4rem;">{{ user.expense_requests.count }}</div>
+        <div class="stat-label" style="font-size: 0.65rem;"> Maombi ya fedha</div>
+      </div>
+    </div>
+  </div>
+  <div class="col" style="min-width: 120px;">
+    <div class="stat-card">
+      <div class="stat-icon green"><i class="fas fa-archive"></i></div>
+      <div class="stat-info">
+        <div class="stat-value" style="font-size: 1.4rem;">{{ user.retirement_forms.count }}</div>
+        <div class="stat-label" style="font-size: 0.65rem;"> Marejesho</div>
+      </div>
+    </div>
+  </div>
+  <div class="col" style="min-width: 120px;">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i class="fas fa-bell"></i></div>
+      <div class="stat-info">
+        <div class="stat-value" style="font-size: 1.4rem;">{{ unread_notifications_count }}</div>
+        <div class="stat-label" style="font-size: 0.65rem;">Ujumbe</div>
+      </div>
+    </div>
+  </div>
+  <div class="col" style="min-width: 120px;">
+    <div class="stat-card">
+      <div class="stat-icon red"><i class="fas fa-check-double"></i></div>
+      <div class="stat-info">
+        <div class="stat-value" style="font-size: 1.4rem;">{{ user.expense_requests.count|default:"—" }}</div>
+        <div class="stat-label" style="font-size: 0.65rem;">Yalio wasilishwa</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ANNOUNCEMENTS GRID -->
+{% if card_announcements %}
+<div class="card">
+  <div class="card-header">
+    <h5><i class="fas fa-bullhorn" style="color:var(--accent);"></i>  Matangazo yote</h5>
+    {% if user.is_staff or is_treasurer %}
+    <a href="{% url 'core:admin_dashboard' %}" class="btn btn-sm btn-outline">
+      <i class="fas fa-plus"></i> Add
+    </a>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <div class="announcement-grid">
+      {% for ann in card_announcements %}
+      <div class="announcement-card">
+        {% if ann.image %}
+        <img src="{{ ann.image.url }}" alt="{{ ann.title }}" class="announcement-img">
+        {% else %}
+        <div class="announcement-placeholder" style="height:35px; background:linear-gradient(135deg, rgba(0,51,102,0.6), rgba(26,82,118,0.6)); display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:var(--accent);">
+          <i class="fas fa-bullhorn"></i>
+        </div>
+        {% endif %}
+        <div class="announcement-body">
+          <div class="announcement-title">{{ ann.title }}</div>
+          <div class="announcement-text">{{ ann.content }}</div>
+          <div class="announcement-date">
+            <i class="fas fa-clock"></i> {{ ann.created_at|date:"d M Y" }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body">
+    <div class="empty-state">
+      <i class="fas fa-bullhorn"></i>
+      <p> Hakuna Matangazo yoyote kipindi hiki.</p>
+      {% if user.is_staff or is_treasurer %}
+      <a href="{% url 'core:admin_dashboard' %}" class="btn btn-accent" style="margin-top:12px;">
+        <i class="fas fa-plus"></i> Add Announcement
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- TREASURER PANEL -->
+{% if is_treasurer %}
+<div class="card">
+  <div class="card-header">
+    <h5><i class="fas fa-coins" style="color:var(--accent);"></i> Treasurer Panel</h5>
+  </div>
+  <div class="card-body">
+    <p style="font-size:0.85rem; color:rgba(255,255,255,0.75); margin: 0 0 12px; line-height:1.4;">
+      Manage payments and final approvals for expense requests and retirement forms.
+    </p>
+    <a href="{% url 'core:treasurer_dashboard' %}" class="btn btn-accent">Access Treasurer Panel</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- ABOUT SECTION -->
+<div class="about-section" style="text-align: center;">
+  <h3><i class="fas fa-info-circle"></i>  Taarifa Zaidi</h3>
+  <p style="color:rgba(255,255,255,0.5);font-size:0.7rem; line-height:1.2; margin:2px 0; font-weight: normal;"> 
+    Mfumo huu unawawezesha wakuu wa idara <br>kuwasilisha maombi ya fedha na marejesho, Kupata taaifa ya maombi ya fedha na marejesho kwa kipindi husika.
+  </p>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(45px, 1fr)); gap: 4px; margin-top:6px; max-width: 100%; justify-content: center;">
+    <div style="text-align:center; padding:4px; background:rgba(255,255,255,0.06); border-radius:6px; overflow: hidden;">
+      <div style="font-size:1rem; color:var(--accent); font-weight:700;">3</div>
+      <div style="font-size:0.55rem; color:rgba(255,255,255,0.5); margin-top:1px; word-break: break-word;">Approvals</div>
+    </div>
+    <div style="text-align:center; padding:4px; background:rgba(255,255,255,0.06); border-radius:6px; overflow: hidden;">
+      <div style="font-size:1rem; color:#58d68d; font-weight:700;">PDF</div>
+      <div style="font-size:0.55rem; color:rgba(255,255,255,0.5); margin-top:1px; word-break: break-word;">Export</div>
+    </div>
+    <div style="text-align:center; padding:4px; background:rgba(255,255,255,0.06); border-radius:6px; overflow: hidden;">
+      <div style="font-size:1rem; color:#5dade2; font-weight:700;"><i class="fas fa-bell" style="display: inline-block; font-size:0.8rem;"></i></div>
+      <div style="font-size:0.55rem; color:rgba(255,255,255,0.5); margin-top:1px; word-break: break-word;">Alerts</div>
+    </div>
+    <div style="text-align:center; padding:4px; background:rgba(255,255,255,0.06); border-radius:6px; overflow: hidden;">
+      <div style="font-size:1rem; color:#c39bd3; font-weight:700;"><i class="fas fa-file-import" style="display: inline-block; font-size:0.8rem;"></i></div>
+      <div style="font-size:0.55rem; color:rgba(255,255,255,0.5); margin-top:1px; word-break: break-word;">Import</div>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}
