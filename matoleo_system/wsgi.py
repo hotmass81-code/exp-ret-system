@@ -1,1 +1,1 @@
-from matoleo_system.wsgi import application
+from matoleo_system.matoleo_system.wsgi import application
