@@ -6,8 +6,8 @@ services:
     plan: free
     rootDir: .
     buildCommand: python -m pip install -r requirements.txt
-    releaseCommand: cd matoleo_system && python manage.py collectstatic --noinput --clear
-    startCommand: gunicorn wsgi:application --chdir matoleo_system/matoleo_system --workers 3 --bind 0.0.0.0:$PORT
+    releaseCommand: python manage.py collectstatic --noinput --clear
+    startCommand: gunicorn matoleo_system.wsgi:application --workers 3 --bind 0.0.0.0:$PORT
     envVars:
       - key: SECRET_KEY
         generateValue: true
