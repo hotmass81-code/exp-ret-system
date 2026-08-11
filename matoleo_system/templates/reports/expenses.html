@@ -26,6 +26,7 @@
        class="btn btn-success">
       <i class="fas fa-download"></i> Download Report
     </a>
+    {# Excel button removed — single Download Report button used for exports #}
   </div>
 </div>
 
@@ -168,14 +169,10 @@
           </tr>
           {% endfor %}
         </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="7" style="text-align:right; font-weight:700; color:rgba(255,255,255,0.7); padding:10px 14px;">TOTAL:</td>
-            <td style="font-weight:800; color:var(--accent); padding:10px 14px;">{{ total|floatformat:2|intcomma }}</td>
-            <td colspan="3"></td>
-          </tr>
-        </tfoot>
       </table>
+    </div>
+    <div style="padding:14px 20px; color:var(--white); font-weight:700; border-top:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); text-align:right;">
+      {{ expense_total|default_if_none:"0.00"|floatformat:2|intcomma }} TZS
     </div>
     {% else %}
     <div class="empty-state"><i class="fas fa-file-invoice-dollar"></i><p>No expense requests found.</p></div>
