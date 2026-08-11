@@ -97,9 +97,21 @@ if not DATABASE_URL:
         DATABASE_URL = f'postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_name}'
 
 if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
-    }
+    try:
+        DATABASES = {
+            'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+        }
+    except Exception:
+        if DEBUG and (BASE_DIR / 'db.sqlite3').exists():
+            DATABASES = {
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': BASE_DIR / 'db.sqlite3',
+                }
+            }
+        else:
+            from django.core.exceptions import ImproperlyConfigured
+            raise ImproperlyConfigured('DATABASE_URL is invalid or missing. Please set DATABASE_URL to a valid database URL.')
 elif DEBUG:
     DATABASES = {
         'default': {
