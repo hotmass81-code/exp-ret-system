@@ -5,6 +5,7 @@ from django.utils import timezone
 from datetime import date
 from core.models import Department, Approver, UserProfile, Contribution, DepartmentBudget, BudgetTransaction
 from .models import ExpenseRequest
+from .views import _compute_department_budget_summary
 
 
 class DashboardFilteringTests(TestCase):
