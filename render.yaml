@@ -18,7 +18,9 @@ services:
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://*.onrender.com"
       - key: DATABASE_URL
-        value: "postgresql://matumiz_db_user:YcCbxXN6L96YQwWK0Qc9k7hoCeJQPcqN@dpg-d9seajajnfac739biogg-a/matumiz_db"
+        fromDatabase:
+          name: matumiz_db
+          property: connectionString
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_PORT
