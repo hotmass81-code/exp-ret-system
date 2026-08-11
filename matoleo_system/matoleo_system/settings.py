@@ -23,6 +23,9 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+if not ALLOWED_HOSTS and not DEBUG:
+    ALLOWED_HOSTS = ['*']
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
@@ -31,6 +34,9 @@ CSRF_TRUSTED_ORIGINS = [
     ).split(',')
     if origin.strip()
 ]
+
+if not CSRF_TRUSTED_ORIGINS and not DEBUG:
+    CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
