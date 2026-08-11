@@ -65,75 +65,92 @@ def get_first_approver(request, department_id):
 
 @login_required
 def expense_dashboard(request):
-    user = request.user
-    is_approver = hasattr(user, 'approver_profile')
-    is_admin = user.is_staff or user.is_superuser
-    is_treasurer = hasattr(user, 'treasurer_profile')
+    try:
+        user = request.user
+        is_approver = hasattr(user, 'approver_profile')
+        is_admin = user.is_staff or user.is_superuser
+        is_treasurer = hasattr(user, 'treasurer_profile')
 
-    if is_admin or is_treasurer:
-        # Admins and Treasurers see all records
-        requests = ExpenseRequest.objects.all().select_related('submitted_by', 'department')
-    elif is_approver:
-        approver = user.approver_profile
-        if approver.level == 'first':
-            # First approvers see only records from their assigned departments
-            requests = ExpenseRequest.objects.filter(
-                department__in=approver.departments.all()
-            ).select_related('submitted_by', 'department')
-        else:
-            # Second approvers see all records
+        if is_admin or is_treasurer:
+            # Admins and Treasurers see all records
             requests = ExpenseRequest.objects.all().select_related('submitted_by', 'department')
-    else:
-        requests = ExpenseRequest.objects.filter(submitted_by=user).select_related('department')
+        elif is_approver:
+            approver = user.approver_profile
+            if approver.level == 'first':
+                # First approvers see only records from their assigned departments
+                requests = ExpenseRequest.objects.filter(
+                    department__in=approver.departments.all()
+                ).select_related('submitted_by', 'department')
+            else:
+                # Second approvers see all records
+                requests = ExpenseRequest.objects.all().select_related('submitted_by', 'department')
+        else:
+            requests = ExpenseRequest.objects.filter(submitted_by=user).select_related('department')
 
-    selected_month = request.GET.get('month', '').strip()
-    today = timezone.localdate()
+        selected_month = request.GET.get('month', '').strip()
+        today = timezone.localdate()
 
-    if selected_month:
-        try:
-            year, month = map(int, selected_month.split('-'))
-            start_date = date(year, month, 1)
-            end_day = calendar.monthrange(year, month)[1]
-            end_date = date(year, month, end_day)
-        except (ValueError, calendar.IllegalMonthError):
+        if selected_month:
+            try:
+                year, month = map(int, selected_month.split('-'))
+                start_date = date(year, month, 1)
+                end_day = calendar.monthrange(year, month)[1]
+                end_date = date(year, month, end_day)
+            except (ValueError, calendar.IllegalMonthError):
+                start_date = today.replace(day=1)
+                end_date = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+                selected_month = today.strftime('%Y-%m')
+        else:
             start_date = today.replace(day=1)
             end_date = today.replace(day=calendar.monthrange(today.year, today.month)[1])
             selected_month = today.strftime('%Y-%m')
-    else:
-        start_date = today.replace(day=1)
-        end_date = today.replace(day=calendar.monthrange(today.year, today.month)[1])
-        selected_month = today.strftime('%Y-%m')
 
-    requests = requests.filter(date__gte=start_date, date__lte=end_date)
+        requests = requests.filter(date__gte=start_date, date__lte=end_date)
 
-    approved_requests = requests.filter(status__in=['approved', 'paid'])
-    pending_requests = requests.exclude(status__in=['approved', 'paid'])
-    # prepare department budget summary for the current user (for Budget button)
-    dept_budget = None
-    profile = None
-    try:
-        profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    except Exception:
+        approved_requests = requests.filter(status__in=['approved', 'paid'])
+        pending_requests = requests.exclude(status__in=['approved', 'paid'])
+        # prepare department budget summary for the current user (for Budget button)
+        dept_budget = None
         profile = None
-    if profile and profile.department:
         try:
-            dept_budget = _compute_department_budget_summary(profile.department)
+            profile, _ = UserProfile.objects.get_or_create(user=request.user)
         except Exception:
-            dept_budget = None
+            profile = None
+        if profile and profile.department:
+            try:
+                dept_budget = _compute_department_budget_summary(profile.department)
+            except Exception:
+                dept_budget = None
 
-    return render(request, 'expenses/dashboard.html', {
-        'requests': requests,
-        'pending_count': pending_requests.count(),
-        'approved_count': approved_requests.count(),
-        'is_approver': is_approver,
-        'is_admin': is_admin,
-        'is_treasurer': is_treasurer,
-        'selected_month': selected_month,
-        'date_from': start_date,
-        'date_to': end_date,
-        'dept_budget': dept_budget,
-        'profile': profile,
-    })
+        return render(request, 'expenses/dashboard.html', {
+            'requests': requests,
+            'pending_count': pending_requests.count(),
+            'approved_count': approved_requests.count(),
+            'is_approver': is_approver,
+            'is_admin': is_admin,
+            'is_treasurer': is_treasurer,
+            'selected_month': selected_month,
+            'date_from': start_date,
+            'date_to': end_date,
+            'dept_budget': dept_budget,
+            'profile': profile,
+        })
+    except Exception as exc:
+        logger.exception('Unexpected error rendering expense dashboard: %s', exc)
+        messages.error(request, 'An error occurred while loading the expense dashboard. Please contact support.')
+        return render(request, 'expenses/dashboard.html', {
+            'requests': ExpenseRequest.objects.none(),
+            'pending_count': 0,
+            'approved_count': 0,
+            'is_approver': False,
+            'is_admin': False,
+            'is_treasurer': False,
+            'selected_month': timezone.localdate().strftime('%Y-%m'),
+            'date_from': timezone.localdate().replace(day=1),
+            'date_to': timezone.localdate(),
+            'dept_budget': None,
+            'profile': None,
+        })
 
 
 def _compute_department_budget_summary(department):
@@ -152,7 +169,8 @@ def _compute_department_budget_summary(department):
         db = DepartmentBudget.objects.filter(department=department).first()
         if db:
             summary['bk_amount'] = db.bk_amount
-    except Exception:
+    except Exception as exc:
+        logger.exception('Error reading DepartmentBudget for department %s: %s', department, exc)
         db = None
 
     # MK requests for the department (do not include in budget totals)

@@ -26,6 +26,10 @@ ALLOWED_HOSTS = [
 if not ALLOWED_HOSTS and not DEBUG:
     ALLOWED_HOSTS = ['*']
 
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
@@ -34,6 +38,11 @@ CSRF_TRUSTED_ORIGINS = [
     ).split(',')
     if origin.strip()
 ]
+
+if RENDER_EXTERNAL_HOSTNAME:
+    render_origin = f'https://{RENDER_EXTERNAL_HOSTNAME}'
+    if render_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(render_origin)
 
 if not CSRF_TRUSTED_ORIGINS and not DEBUG:
     CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
@@ -92,7 +101,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'matoleo_system.wsgi.application'
 
 # Database — uses DATABASE_URL env var on Render (PostgreSQL), falls back to SQLite only in DEBUG local dev
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('RENDER_DATABASE_URL')
 if not DATABASE_URL:
     pg_host = os.environ.get('PGHOST') or os.environ.get('POSTGRES_HOST')
     pg_port = os.environ.get('PGPORT') or os.environ.get('POSTGRES_PORT') or '5432'

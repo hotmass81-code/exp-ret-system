@@ -1,6 +1,9 @@
+import logging
+
 from django.db.models import Q, Sum, Value, DecimalField
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden
 from expenses.models import ExpenseRequest
@@ -9,6 +12,8 @@ from core.models import Department
 import io
 import calendar
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 def _default_date_range():
@@ -25,17 +30,18 @@ def reports_dashboard(request):
 
 @login_required
 def expenses_report(request):
-    user = request.user
-    is_admin = user.is_staff or user.is_superuser
-    is_treasurer = hasattr(user, 'treasurer_profile')
-    qs = ExpenseRequest.objects.all() if (is_admin or is_treasurer) else ExpenseRequest.objects.filter(submitted_by=user)
+    try:
+        user = request.user
+        is_admin = user.is_staff or user.is_superuser
+        is_treasurer = hasattr(user, 'treasurer_profile')
+        qs = ExpenseRequest.objects.all() if (is_admin or is_treasurer) else ExpenseRequest.objects.filter(submitted_by=user)
 
-    status_choices = ExpenseRequest.STATUS_CHOICES
-    approved_count = qs.filter(status__in=['approved', 'paid']).count()
-    pending_count = qs.exclude(status__in=['approved', 'paid']).count()
-    expense_total = qs.aggregate(total=Coalesce(Sum('total_amount'), Value(0), output_field=DecimalField()))['total']
+        status_choices = ExpenseRequest.STATUS_CHOICES
+        approved_count = qs.filter(status__in=['approved', 'paid']).count()
+        pending_count = qs.exclude(status__in=['approved', 'paid']).count()
+        expense_total = qs.aggregate(total=Coalesce(Sum('total_amount'), Value(0), output_field=DecimalField()))['total']
 
-    return render(request, 'reports/expenses.html', {
+        return render(request, 'reports/expenses.html', {
         'expenses': list(qs),
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
@@ -51,6 +57,25 @@ def expenses_report(request):
         'pending_count': pending_count,
         'expense_total': expense_total,
     })
+    except Exception as exc:
+        logger.exception('Unexpected error rendering expenses report dashboard: %s', exc)
+        messages.error(request, 'An error occurred while loading the expenses report. Please contact support.')
+        return render(request, 'reports/expenses.html', {
+            'expenses': [],
+            'is_admin': False,
+            'is_treasurer': False,
+            'departments': Department.objects.none(),
+            'status_choices': ExpenseRequest.STATUS_CHOICES,
+            'status_filter': '',
+            'search': '',
+            'date_from': _default_date_range()[0],
+            'date_to': _default_date_range()[1],
+            'payment_filter': '',
+            'department_id': '',
+            'approved_count': 0,
+            'pending_count': 0,
+            'expense_total': 0,
+        })
 
 
 @login_required
@@ -60,12 +85,13 @@ def retirement_report(request):
     is_treasurer = hasattr(user, 'treasurer_profile')
     qs = RetirementForm.objects.all() if (is_admin or is_treasurer) else RetirementForm.objects.filter(submitted_by=user)
 
-    status_choices = RetirementForm.STATUS_CHOICES
-    approved_count = qs.filter(status__in=['approved', 'paid']).count()
-    pending_count = qs.exclude(status__in=['approved', 'paid']).count()
-    retirement_total = qs.aggregate(total=Coalesce(Sum('remaining_amount'), Value(0), output_field=DecimalField()))['total']
+    try:
+        status_choices = RetirementForm.STATUS_CHOICES
+        approved_count = qs.filter(status__in=['approved', 'paid']).count()
+        pending_count = qs.exclude(status__in=['approved', 'paid']).count()
+        retirement_total = qs.aggregate(total=Coalesce(Sum('remaining_amount'), Value(0), output_field=DecimalField()))['total']
 
-    return render(request, 'reports/retirement.html', {
+        return render(request, 'reports/retirement.html', {
         'retirements': list(qs),
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
@@ -79,6 +105,23 @@ def retirement_report(request):
         'pending_count': pending_count,
         'retirement_total': retirement_total,
     })
+    except Exception as exc:
+        logger.exception('Unexpected error rendering retirement report dashboard: %s', exc)
+        messages.error(request, 'An error occurred while loading the retirement report. Please contact support.')
+        return render(request, 'reports/retirement.html', {
+            'retirements': [],
+            'is_admin': False,
+            'is_treasurer': False,
+            'departments': Department.objects.none(),
+            'status_choices': RetirementForm.STATUS_CHOICES,
+            'status_filter': '',
+            'search': '',
+            'date_from': _default_date_range()[0],
+            'date_to': _default_date_range()[1],
+            'approved_count': 0,
+            'pending_count': 0,
+            'retirement_total': 0,
+        })
 
 
 @login_required
