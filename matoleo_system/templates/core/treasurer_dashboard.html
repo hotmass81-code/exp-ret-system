@@ -138,9 +138,14 @@
 <div class="card" style="margin-top:20px;">
   <div class="card-header">
     <h5><i class="fas fa-bullhorn" style="color:var(--accent);"></i> Announcements</h5>
-    <button class="btn btn-sm btn-accent" onclick="showAnnouncementModal()">
-      <i class="fas fa-plus"></i> Post Announcement
-    </button>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <a href="{% url 'core:manage_budgets' %}" class="btn btn-sm btn-accent">
+        <i class="fas fa-wallet"></i> Manage Budgets
+      </a>
+      <button class="btn btn-sm btn-accent" onclick="showAnnouncementModal()">
+        <i class="fas fa-plus"></i> Post Announcement
+      </button>
+    </div>
   </div>
   <div class="card-body">
     {% if announcements %}

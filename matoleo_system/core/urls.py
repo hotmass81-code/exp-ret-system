@@ -24,4 +24,5 @@ urlpatterns = [
     path('admin-panel/user/<int:pk>/toggle-staff/', views.toggle_user_staff, name='toggle_user_staff'),
     path('admin-panel/user/<int:pk>/delete/', views.delete_user, name='delete_user'),
     path('api/approver-info/', views.get_approver_info, name='get_approver_info'),
+    path('admin-panel/budgets/', views.manage_budgets, name='manage_budgets'),
 ]

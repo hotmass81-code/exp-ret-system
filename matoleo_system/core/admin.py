@@ -5,6 +5,7 @@ from django import forms
 from django.contrib import messages
 import uuid
 from .models import Announcement, Department, Approver, Treasurer, UserProfile, RegistrationCode, Notification
+from .models import DepartmentBudget, Contribution, BudgetTransaction
 
 
 class GenerateCodesForm(forms.Form):
@@ -98,3 +99,20 @@ class RegistrationCodeAdmin(admin.ModelAdmin):
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['recipient', 'title', 'is_read', 'created_at']
     list_filter = ['is_read']
+
+
+@admin.register(DepartmentBudget)
+class DepartmentBudgetAdmin(admin.ModelAdmin):
+    list_display = ['department', 'bk_amount', 'mk_enabled', 'created_at']
+
+
+@admin.register(Contribution)
+class ContributionAdmin(admin.ModelAdmin):
+    list_display = ['department', 'name', 'amount', 'is_active', 'created_at']
+    list_filter = ['is_active']
+
+
+@admin.register(BudgetTransaction)
+class BudgetTransactionAdmin(admin.ModelAdmin):
+    list_display = ['department', 'contribution', 'expense_form_number', 'amount', 'transaction_type', 'created_at']
+    list_filter = ['transaction_type']

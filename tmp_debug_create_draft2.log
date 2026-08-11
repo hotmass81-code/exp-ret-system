@@ -1,0 +1,6 @@
+saved user testuser
+logged_in True
+response status 302
+response redirected /expenses/16/
+response content b''
+cookies {'sessionid': <Morsel: sessionid=ln0kzrwx677082nb4i5kyjrps4sswgr6; Domain=None; expires=None; Max-Age=None; Path=/>, 'messages': <Morsel: messages=W1siX19qc29uX21lc3NhZ2UiLDAsMjUsIkV4cGVuc2UgcmVxdWVzdCBFWFAtMjAyNi0wMDA4IGNyZWF0ZWQgYXMgZHJhZnQuIiwiIl1d:1wtPDC:lEdcX6iYXb2LnmsUTWnTMde0pB74BqeAT1t3KPTL2po; HttpOnly; Path=/; SameSite=Lax>}

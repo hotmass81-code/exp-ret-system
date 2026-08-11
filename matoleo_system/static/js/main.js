@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ---- AUTO-DISMISS ALERTS ----
-  const alerts = document.querySelectorAll('.alert');
+  const alerts = document.querySelectorAll('.alert:not(.alert-persistent)');
   alerts.forEach(function (alert) {
     setTimeout(function () {
       alert.style.transition = 'opacity 0.5s ease';

@@ -90,6 +90,28 @@
         </div>
       </div>
     </div>
+      <!-- BUDGET SELECTION -->
+      <div class="card">
+        <div class="card-header">
+          <h5><i class="fas fa-wallet" style="color:var(--accent);"></i> Budget</h5>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Choose Budget <span style="color:var(--accent);">*</span></label>
+            <select name="budget_choice" id="budget_choice" class="form-control" required>
+              <option value="BK" {% if expense and expense.budget_choice == 'BK' %}selected{% endif %}>BK (Church Budget)</option>
+              {% if dept_budget and dept_budget.contributions %}
+                {% for c in dept_budget.contributions %}
+                  <option value="CONTRIBUTION" data-contrib-id="{{ c.id }}" {% if expense and expense.contribution and expense.contribution.id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+              {% endif %}
+              <option value="MK" {% if expense and expense.budget_choice == 'MK' %}selected{% endif %}>MK (Special)</option>
+            </select>
+            <input type="hidden" name="contribution" id="contribution_input" value="{% if expense and expense.contribution %}{{ expense.contribution.id }}{% endif %}">
+          </div>
+
+        </div>
+      </div>
 
     <!-- ITEMS TABLE -->
     <div class="card">
@@ -183,4 +205,23 @@
 
   </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var sel = document.getElementById('budget_choice');
+  var contribInput = document.getElementById('contribution_input');
+  if(!sel) return;
+  sel.addEventListener('change', function(){
+    var opt = sel.options[sel.selectedIndex];
+    var cid = opt.getAttribute('data-contrib-id');
+    if(cid){
+      contribInput.value = cid;
+    } else {
+      contribInput.value = '';
+    }
+  });
+});
+</script>
 {% endblock %}

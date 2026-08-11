@@ -1352,6 +1352,19 @@ textarea.form-control { resize: vertical; min-height: 90px; }
 .alert-warning { background: rgba(243,156,18,0.15); border: 1px solid rgba(243,156,18,0.3); color: #f8c471; }
 .alert-info { background: rgba(41,128,185,0.15); border: 1px solid rgba(41,128,185,0.3); color: #5dade2; }
 
+.mk-notice {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(41,128,185,0.15);
+  border: 1px solid rgba(41,128,185,0.3);
+  color: #5dade2;
+}
+
 /* ---- ANNOUNCEMENTS TICKER ---- */
 .announcement-ticker {
   background: rgba(243,156,18,0.15);

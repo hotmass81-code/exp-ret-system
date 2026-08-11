@@ -6,6 +6,20 @@
 {% block page_title %}Maombi ya Fedha{% endblock %}
 
 {% block content %}
+<style>
+  @media (max-width: 800px) {
+    #budgetModal .budget-summary-row,
+    #budgetModal .budget-card-row {
+      flex-direction: column !important;
+      align-items: stretch !important;
+    }
+    #budgetModal .budget-summary-card,
+    #budgetModal .budget-card {
+      min-width: auto !important;
+      width: 100% !important;
+    }
+  }
+</style>
 
 <!-- HEADER ROW -->
 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -17,12 +31,123 @@
       {% if is_admin or is_approver or is_treasurer %}Maombi ya Fedha yalio Wasilishwa{% else %}Angalia Maombi yalio Wasilishwa{% endif %}
     </p>
   </div>
-  {% if not is_approver and not is_treasurer %}
-  <a href="{% url 'expenses:create' %}" class="btn btn-accent">
-    <i class="fas fa-plus"></i> Fomu Mpya
-  </a>
-  {% endif %}
+  <div style="display:flex; gap:8px; align-items:center;">
+    {% if not is_approver and not is_treasurer %}
+    <a href="{% url 'expenses:create' %}" class="btn btn-accent">
+      <i class="fas fa-plus"></i> Fomu Mpya
+    </a>
+    {% endif %}
+    {% if profile and profile.department and not is_approver %}
+    <button class="btn btn-accent btn-sm" id="openBudgetBtn" style="background:linear-gradient(135deg,#e67e22,var(--accent)); padding:8px 14px;">
+      <i class="fas fa-wallet"></i> Budget
+    </button>
+    {% endif %}
+  </div>
 </div>
+
+{% if dept_budget %}
+<!-- Budget Modal -->
+<div class="modal-overlay" id="budgetModal" style="display:none;">
+  <div class="modal-box" style="width:min(98vw,1000px); max-width:98vw; min-width:auto; max-height:90vh; overflow:auto;">
+    <div class="modal-title"><i class="fas fa-wallet" style="color:var(--accent);"></i> Department Budget Summary</div>
+    <div style="margin-top:12px;">
+      {% if dept_budget %}
+      <div class="budget-summary-row" style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px;">
+        <div class="budget-summary-card" style="flex:1 1 320px; min-width:260px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px;">
+          <div style="font-size:0.75rem; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Total Budget</div>
+          <div style="font-size:1.4rem; font-weight:700;">TZS {{ dept_budget.total_budget|floatformat:2|intcomma }}</div>
+          <div style="color:rgba(255,255,255,0.75); margin-top:8px;">BK + Active Contributions</div>
+        </div>
+        <div class="budget-summary-card" style="flex:1 1 320px; min-width:260px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px;">
+          <div style="font-size:0.75rem; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Balance</div>
+          <div style="font-size:1.4rem; font-weight:700;">TZS {{ dept_budget.remaining|floatformat:2|intcomma }}</div>
+          <div style="color:rgba(255,255,255,0.75); margin-top:8px;">BK + Active Contributions less used</div>
+        </div>
+      </div>
+      <div class="budget-card-row" style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; margin-bottom:16px;">
+        <div class="budget-card" style="flex:1 1 280px; min-width:220px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px;">
+          <div style="font-size:0.85rem; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">BK</div>
+          <div style="font-size:1.2rem; font-weight:700; margin-bottom:4px;">TZS {{ dept_budget.bk_amount|floatformat:2|intcomma }}</div>
+          <div style="color:rgba(255,255,255,0.8); margin-bottom:10px;">Used: TZS {{ dept_budget.bk_used|floatformat:2|intcomma }}</div>
+          <div style="color:rgba(255,255,255,0.85); font-size:0.95rem;">Forms:</div>
+          <div style="margin-left:10px; margin-top:6px; color:rgba(255,255,255,0.75);">
+            {% if dept_budget.bk_forms %}
+              {% for f in dept_budget.bk_forms %}
+                <div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.12); {% if forloop.last %}border-bottom:none;{% endif %}">
+                  {% if f.pk %}
+                    <a href="{% url 'expenses:detail' f.pk %}" style="color:var(--accent); text-decoration:none;">{{ f.form_number }}</a>
+                  {% else %}
+                    {{ f.form_number }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <div>—</div>
+            {% endif %}
+          </div>
+          <div style="margin-top:10px; font-weight:700;">Balance: TZS {{ dept_budget.bk_remaining|floatformat:2|intcomma }}</div>
+        </div>
+
+        <div class="budget-card" style="flex:1 1 320px; min-width:300px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px;">
+          <div style="font-size:0.85rem; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">Active Contributions</div>
+          {% if dept_budget.contributions %}
+            {% for c in dept_budget.contributions %}
+              <div style="margin-bottom:18px;">
+                <div style="font-size:1rem; font-weight:700;">{{ c.name }}</div>
+                <div style="color:rgba(255,255,255,0.8);">Total: TZS {{ c.amount|floatformat:2|intcomma }}</div>
+                <div style="color:rgba(255,255,255,0.8);">Used: TZS {{ c.used|floatformat:2|intcomma }}</div>
+                <div style="color:rgba(255,255,255,0.75); margin-top:6px;">Forms:</div>
+                <div style="margin-left:10px; color:rgba(255,255,255,0.75);">
+                  {% if c.forms %}
+                    {% for f in c.forms %}
+                      <div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.12); {% if forloop.last %}border-bottom:none;{% endif %}">
+                        {% if f.pk %}
+                          <a href="{% url 'expenses:detail' f.pk %}" style="color:var(--accent); text-decoration:none;">{{ f.form_number }}</a>
+                        {% else %}
+                          {{ f.form_number }}
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  {% else %}
+                    <div>—</div>
+                  {% endif %}
+                </div>
+                <div style="margin-top:6px; font-weight:700;">Balance: TZS {{ c.remaining|floatformat:2|intcomma }}</div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div style="color:rgba(255,255,255,0.8);">No active contributions available.</div>
+          {% endif %}
+        </div>
+
+        <div class="budget-card" style="flex:1 1 320px; min-width:300px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px;">
+          <div style="font-size:0.85rem; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">MK</div>
+          <div style="font-size:1.2rem; font-weight:700; margin-bottom:4px;">Total: TZS {{ dept_budget.mk_total_amount|floatformat:2|intcomma }}</div>
+          <div style="color:rgba(255,255,255,0.85); margin-top:10px;">Forms:</div>
+          <div style="margin-left:10px; margin-top:6px; color:rgba(255,255,255,0.75);">
+            {% if dept_budget.mk_requests %}
+              {% for mk in dept_budget.mk_requests %}
+                <div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.12); {% if forloop.last %}border-bottom:none;{% endif %}">
+                  <a href="{% url 'expenses:detail' mk.pk %}" style="color:var(--accent); text-decoration:none;">{{ mk.form_number }}</a>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div>—</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div style="color:rgba(255,255,255,0.8);">No budget configured for your department yet. Contact an Administrator or Treasurer to set BK and contributions.</div>
+      {% endif %}
+    </div>
+    <div style="margin-top:16px; text-align:right;">
+      <button class="btn btn-outline" onclick="closeBudget()">Close</button>
+      <a href="{% url 'expenses:create' %}" class="btn btn-accent">Create New Form</a>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- FILTER BY MONTH -->
 <div class="filter-bar">
@@ -135,7 +260,7 @@
             </td>
             <td>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <a href="{% url 'expenses:detail' req.pk %}" class="btn btn-sm btn-outline">
+                <a href="{% url 'expenses:detail' req.pk %}" class="btn btn-sm btn-outline" title="View details">
                   <i class="fas fa-eye"></i>
                 </a>
                 {% if req.status == 'draft' and req.submitted_by == user or req.status == 'rejected_for_editing' and req.submitted_by == user %}
@@ -173,4 +298,21 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function closeBudget(){
+  document.getElementById('budgetModal').style.display='none';
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var btn = document.getElementById('openBudgetBtn');
+  if(btn){
+    btn.addEventListener('click', function(){
+      var modal = document.getElementById('budgetModal');
+      if(modal) modal.style.display = 'block';
+    });
+  }
+});
+</script>
 {% endblock %}

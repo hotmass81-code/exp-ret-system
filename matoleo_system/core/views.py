@@ -7,6 +7,7 @@ from django.db import models
 from django.urls import resolve, Resolver404
 from urllib.parse import urlparse
 from .models import Announcement, Department, Approver, Treasurer, UserProfile, RegistrationCode, Notification
+from .models import DepartmentBudget, Contribution
 from django.contrib.auth.models import User
 import uuid
 
@@ -400,4 +401,142 @@ def get_approver_info(request):
         data = [{'name': a.user.get_full_name(), 'phone': a.phone_number} for a in approvers]
         return JsonResponse({'approvers': data})
     return JsonResponse({'approvers': []})
+
+
+@login_required
+def manage_budgets(request):
+    # Only admins or treasurers can access
+    is_treasurer = hasattr(request.user, 'treasurer_profile')
+    is_admin = request.user.is_staff or request.user.is_superuser
+    if not (is_admin or is_treasurer):
+        messages.error(request, 'Access denied. Administrator or Treasurer privileges required.')
+        return redirect('core:home')
+
+    departments = Department.objects.all().order_by('name')
+    # Selected department (via GET) to focus the UI
+    selected_dept = None
+    selected_dept_id = request.GET.get('department')
+    if selected_dept_id:
+        try:
+            selected_dept = Department.objects.get(id=selected_dept_id)
+        except Department.DoesNotExist:
+            selected_dept = None
+    if request.method == 'POST':
+        # Update BK or add contribution
+        action = request.POST.get('action')
+        dept_id = request.POST.get('department')
+        try:
+            dept = Department.objects.get(id=dept_id)
+        except Department.DoesNotExist:
+            messages.error(request, 'Invalid department selected.')
+            return redirect('core:manage_budgets')
+
+        if action == 'update_bk':
+            try:
+                bk_amount = float(request.POST.get('bk_amount', 0) or 0)
+            except ValueError:
+                bk_amount = 0
+            mk_enabled = bool(request.POST.get('mk_enabled'))
+            db, _ = DepartmentBudget.objects.get_or_create(department=dept)
+            db.bk_amount = bk_amount
+            db.mk_enabled = mk_enabled
+            db.save()
+            messages.success(request, f'BK updated for {dept.name}.')
+        elif action == 'add_contribution':
+            name = request.POST.get('name', '').strip()
+            try:
+                amount = float(request.POST.get('amount', 0) or 0)
+            except ValueError:
+                amount = 0
+            # max 4 contributions per department
+            existing = Contribution.objects.filter(department=dept).count()
+            if existing >= 4:
+                messages.error(request, 'Maximum of 4 contributions per department reached.')
+            else:
+                if name:
+                    Contribution.objects.create(department=dept, name=name, amount=amount, is_active=True)
+                    messages.success(request, f'Contribution "{name}" added to {dept.name}.')
+                else:
+                    messages.error(request, 'Contribution name is required.')
+        elif action == 'edit_contribution':
+            # Edit existing contribution
+            contrib_id = request.POST.get('contribution_id')
+            try:
+                contrib = Contribution.objects.get(id=contrib_id, department=dept)
+                new_name = request.POST.get('name', '').strip()
+                try:
+                    new_amount = float(request.POST.get('amount', 0) or 0)
+                except ValueError:
+                    new_amount = contrib.amount
+                if new_name:
+                    contrib.name = new_name
+                contrib.amount = new_amount
+                contrib.save()
+                messages.success(request, f'Contribution "{contrib.name}" updated for {dept.name}.')
+            except Contribution.DoesNotExist:
+                messages.error(request, 'Contribution not found.')
+        elif action == 'delete_contribution':
+            contrib_id = request.POST.get('contribution_id')
+            try:
+                contrib = Contribution.objects.get(id=contrib_id, department=dept)
+                contrib.delete()
+                messages.success(request, 'Contribution deleted.')
+            except Contribution.DoesNotExist:
+                messages.error(request, 'Contribution not found.')
+        elif action == 'delete_budget':
+            # Remove department budget and all contributions
+            db = DepartmentBudget.objects.filter(department=dept).first()
+            if db:
+                db.delete()
+                messages.success(request, f'BK budget removed for {dept.name}.')
+            # Optionally keep contributions; leave them as-is
+        elif action == 'add_contributions':
+            # Support adding multiple contributions at once (names[] and amounts[])
+            names = request.POST.getlist('name[]')
+            amounts = request.POST.getlist('amount[]')
+            created = 0
+            for n, a in zip(names, amounts):
+                if not n:
+                    continue
+                try:
+                    amt = float(a or 0)
+                except ValueError:
+                    amt = 0
+                existing = Contribution.objects.filter(department=dept).count()
+                if existing + created >= 4:
+                    break
+                Contribution.objects.create(department=dept, name=n.strip(), amount=amt, is_active=True)
+                created += 1
+            if created:
+                messages.success(request, f'Added {created} contribution(s) to {dept.name}.')
+
+    # Prepare budgets summary
+    budgets = []
+    for d in departments:
+        db = DepartmentBudget.objects.filter(department=d).first()
+        contributions = Contribution.objects.filter(department=d).order_by('-created_at')[:4]
+        budgets.append({'department': d, 'budget': db, 'contributions': contributions})
+
+    # If a department is selected, compute totals for display
+    selected = None
+    if selected_dept:
+        db = DepartmentBudget.objects.filter(department=selected_dept).first()
+        contributions = list(Contribution.objects.filter(department=selected_dept).order_by('-created_at')[:4])
+        bk_amount = float(db.bk_amount) if db and db.bk_amount is not None else 0.0
+        contrib_total = sum([float(c.amount or 0) for c in contributions])
+        total_budget = bk_amount + contrib_total
+        selected = {
+            'department': selected_dept,
+            'budget': db,
+            'contributions': contributions,
+            'bk_amount': bk_amount,
+            'contrib_total': contrib_total,
+            'total_budget': total_budget,
+        }
+
+    return render(request, 'core/manage_budgets.html', {
+        'budgets': budgets,
+        'selected': selected,
+        'selected_dept': selected_dept,
+    })
 

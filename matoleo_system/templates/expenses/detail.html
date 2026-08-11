@@ -195,6 +195,24 @@
                 TZS {{ expense.total_amount|floatformat:2|intcomma }}
               </span>
             </div>
+            {% if expense.status != 'draft' and expense.status != 'rejected_for_editing' %}
+              {% if expense.budget_choice == 'MK' %}
+              <div class="mk-notice" style="margin-top:12px;">
+                <i class="fas fa-info-circle"></i>
+                <div>No budget available; department requested to use MK.</div>
+              </div>
+              {% elif expense.budget_choice == 'BK' %}
+              <div class="detail-row">
+                <span class="detail-label">Budget Source:</span>
+                <span class="detail-value">BK</span>
+              </div>
+              {% elif expense.budget_choice == 'CONTRIBUTION' and expense.contribution %}
+              <div class="detail-row">
+                <span class="detail-label">Budget Source:</span>
+                <span class="detail-value">CONTRIBUTION — {{ expense.contribution.name }}</span>
+              </div>
+              {% endif %}
+            {% endif %}
           </div>
         </div>
       </div>

@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Manage Budgets{% endblock %}
+{% block page_title %}Budget Management{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header"><h5>Budgets by Department</h5></div>
+  <div class="card-body">
+    <div style="display:flex; gap:18px; align-items:flex-start;">
+      <div style="width:320px;">
+        <label><strong>Select Department</strong></label>
+        <form method="get">
+          <select name="department" class="form-control" onchange="this.form.submit();">
+            <option value="">-- Choose department --</option>
+            {% for d in budgets %}
+            <option value="{{ d.department.id }}" {% if request.GET.department == d.department.id|stringformat:'s' %}selected{% endif %}>{{ d.department.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      <div style="flex:1;">
+        {% comment %} 'get_item' filter wasn't available. The view provides
+            `selected` and `selected_dept` in context; use those instead. {% endcomment %}
+        {% comment %} Find the selected budget data in budgets list {% endcomment %}
+        {% for b in budgets %}
+          {% if selected_dept and selected_dept.id == b.department.id %}
+            <h4>{{ b.department.name }}</h4>
+            <div style="display:flex; gap:16px; align-items:flex-start;">
+              <div style="flex:1;">
+                <h5>BK (Base Budget)</h5>
+                <form method="post" style="display:flex; gap:8px; align-items:center;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="update_bk">
+                  <input type="hidden" name="department" value="{{ b.department.id }}">
+                  <input type="number" step="0.01" name="bk_amount" value="{{ b.budget.bk_amount|default:0 }}" style="width:160px;">
+                  <label>MK <input type="checkbox" name="mk_enabled" {% if b.budget and b.budget.mk_enabled %}checked{% endif %}></label>
+                  <button class="btn btn-sm btn-primary" type="submit">Save BK</button>
+                </form>
+                <div style="margin-top:8px; font-size:0.95rem;"><strong>MK Active:</strong> {% if b.budget and b.budget.mk_enabled %}Yes{% else %}No{% endif %}</div>
+              </div>
+              <div style="width:260px;">
+                <h5>Total Budget</h5>
+                {% if selected %}
+                <div style="font-size:1.2rem; font-weight:700;">TSh {{ selected.total_budget|floatformat:2|intcomma }}</div>
+                <div style="font-size:0.95rem; color:rgba(255,255,255,0.8);">BK: {{ selected.bk_amount|floatformat:2|intcomma }} • Contributions: {{ selected.contrib_total|floatformat:2|intcomma }}</div>
+                {% else %}
+                <div style="font-size:1.2rem; font-weight:700;">TSh {{ b.budget.bk_amount|default:0|floatformat:2|intcomma }}</div>
+                <div style="font-size:0.95rem; color:rgba(255,255,255,0.8);">BK: {{ b.budget.bk_amount|default:0|floatformat:2|intcomma }} • Contributions: 0.00</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <hr>
+            <h5>Contributions</h5>
+            <div>
+              {% for c in b.contributions %}
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+                  <form method="post" style="display:flex; gap:6px; align-items:center; flex:1;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="edit_contribution">
+                    <input type="hidden" name="department" value="{{ b.department.id }}">
+                    <input type="hidden" name="contribution_id" value="{{ c.id }}">
+                    <input type="text" name="name" value="{{ c.name }}" placeholder="Name" style="width:220px;">
+                    <input type="number" step="0.01" name="amount" value="{{ c.amount }}" style="width:120px;">
+                    <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                  </form>
+                  <form method="post" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_contribution">
+                    <input type="hidden" name="department" value="{{ b.department.id }}">
+                    <input type="hidden" name="contribution_id" value="{{ c.id }}">
+                    <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Delete this contribution?');">Delete</button>
+                  </form>
+                </div>
+              {% empty %}
+                <div>No contributions yet.</div>
+              {% endfor %}
+            </div>
+
+            <hr>
+            <h5>Add Contribution(s)</h5>
+            <form method="post" id="addMultipleContribs">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add_contributions">
+              <input type="hidden" name="department" value="{{ b.department.id }}">
+              <div id="contribRows">
+                <div style="display:flex; gap:8px; margin-bottom:6px; align-items:center;">
+                  <input type="text" name="name[]" placeholder="Contribution name" style="width:240px;" required>
+                  <input type="number" step="0.01" name="amount[]" placeholder="Amount" style="width:140px;" required>
+                </div>
+              </div>
+              <div style="margin-top:8px; display:flex; gap:8px;">
+                <button type="button" class="btn btn-sm btn-outline" id="addRowBtn">Add another</button>
+                <button type="submit" class="btn btn-sm btn-success">Save Contributions</button>
+              </div>
+            </form>
+
+            <hr>
+            <form method="post" style="margin-top:6px;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_budget">
+              <input type="hidden" name="department" value="{{ b.department.id }}">
+              <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Delete BK budget for this department?');">Remove BK</button>
+            </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var addBtn = document.getElementById('addRowBtn');
+  if(addBtn){
+    addBtn.addEventListener('click', function(){
+      var container = document.getElementById('contribRows');
+      if(!container) return;
+      var current = container.querySelectorAll('input[name="name[]"]').length;
+      if(current >= 4) return alert('Maximum 4 contributions per department.');
+      var div = document.createElement('div');
+      div.style.display = 'flex'; div.style.gap = '8px'; div.style.marginBottom = '6px'; div.style.alignItems = 'center';
+      div.innerHTML = '<input type="text" name="name[]" placeholder="Contribution name" style="width:240px;" required> <input type="number" step="0.01" name="amount[]" placeholder="Amount" style="width:140px;" required> <button type="button" class="btn btn-sm btn-danger removeRow">Remove</button>';
+      container.appendChild(div);
+      div.querySelector('.removeRow').addEventListener('click', function(){ div.remove(); });
+    });
+  }
+});
+</script>

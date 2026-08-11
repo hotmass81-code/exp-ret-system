@@ -3,13 +3,15 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.contrib.auth.models import User
 from .models import ExpenseRequest, ExpenseItem
 import calendar
 import logging
 from datetime import datetime, date
 from core.models import Department, Approver, Treasurer, Notification, UserProfile
+from django.db.models import Sum, Q
+from core.models import DepartmentBudget, Contribution, BudgetTransaction
 from core.pdf_utils import expense_to_pdf, payment_voucher_pdf
 from django.conf import settings
 import io
@@ -106,6 +108,18 @@ def expense_dashboard(request):
 
     approved_requests = requests.filter(status__in=['approved', 'paid'])
     pending_requests = requests.exclude(status__in=['approved', 'paid'])
+    # prepare department budget summary for the current user (for Budget button)
+    dept_budget = None
+    profile = None
+    try:
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    except Exception:
+        profile = None
+    if profile and profile.department:
+        try:
+            dept_budget = _compute_department_budget_summary(profile.department)
+        except Exception:
+            dept_budget = None
 
     return render(request, 'expenses/dashboard.html', {
         'requests': requests,
@@ -117,7 +131,76 @@ def expense_dashboard(request):
         'selected_month': selected_month,
         'date_from': start_date,
         'date_to': end_date,
+        'dept_budget': dept_budget,
+        'profile': profile,
     })
+
+
+def _compute_department_budget_summary(department):
+    """Return a dict with BK, contributions, total_budget, total_expenses, remaining."""
+    summary = {
+        'bk_amount': 0,
+        'bk_used': 0,
+        'contributions': [],
+        'mk_requests': [],
+        'mk_total_amount': 0,
+        'total_budget': 0,
+        'total_expenses': 0,
+        'remaining': 0,
+    }
+    try:
+        db = DepartmentBudget.objects.filter(department=department).first()
+        if db:
+            summary['bk_amount'] = db.bk_amount
+    except Exception:
+        db = None
+
+    # MK requests for the department (do not include in budget totals)
+    mk_expenses = ExpenseRequest.objects.filter(
+        department=department,
+        budget_choice='MK'
+    ).filter(Q(status='paid') | Q(is_paid=True))
+    mk_form_numbers = list(mk_expenses.values_list('form_number', flat=True))
+    summary['mk_requests'] = list(mk_expenses.values('form_number', 'pk', 'total_amount'))
+    summary['mk_total_amount'] = mk_expenses.aggregate(total=Sum('total_amount'))['total'] or 0
+
+    # contributions
+    contributions = Contribution.objects.filter(department=department, is_active=True)[:4]
+    for c in contributions:
+        contrib_tx = BudgetTransaction.objects.filter(contribution=c, transaction_type='deduction').exclude(expense_form_number__in=mk_form_numbers)
+        used = contrib_tx.aggregate(Sum('amount'))['amount__sum'] or 0
+        c_remaining = c.amount - used
+        tx_forms = list(contrib_tx.values_list('expense_form_number', flat=True))
+        if tx_forms:
+            requests = ExpenseRequest.objects.filter(form_number__in=tx_forms).values('form_number', 'pk')
+            request_map = {r['form_number']: r['pk'] for r in requests}
+            form_list = [{'form_number': form, 'pk': request_map.get(form)} for form in tx_forms if form]
+        else:
+            form_list = []
+        summary['contributions'].append({'id': c.id, 'name': c.name, 'amount': c.amount, 'used': used, 'remaining': c_remaining, 'forms': form_list})
+
+    # BK used (transactions without contribution)
+    bk_transactions = BudgetTransaction.objects.filter(department=department, contribution__isnull=True, transaction_type='deduction').exclude(expense_form_number__in=mk_form_numbers)
+    bk_used = bk_transactions.aggregate(Sum('amount'))['amount__sum'] or 0
+    bk_forms = list(bk_transactions.values_list('expense_form_number', flat=True))
+    if bk_forms:
+        bk_requests = ExpenseRequest.objects.filter(form_number__in=bk_forms).values('form_number', 'pk')
+        request_map = {r['form_number']: r['pk'] for r in bk_requests}
+        summary['bk_forms'] = [{'form_number': form, 'pk': request_map.get(form)} for form in bk_forms if form]
+    else:
+        summary['bk_forms'] = []
+    summary['bk_used'] = bk_used
+    summary['bk_remaining'] = summary['bk_amount'] - bk_used
+
+    total_contrib = sum([c['amount'] for c in summary['contributions']])
+    total_budget = summary['bk_amount'] + total_contrib
+    total_expenses = bk_used + sum([c['used'] for c in summary['contributions']])
+    remaining = total_budget - total_expenses
+
+    summary['total_budget'] = total_budget
+    summary['total_expenses'] = total_expenses
+    summary['remaining'] = remaining
+    return summary
 
 
 @login_required
@@ -154,9 +237,7 @@ def create_expense(request):
                 'today_date': date.today().isoformat(),
             })
 
-        try:
-            dept = Department.objects.get(id=dept_id)
-        except Department.DoesNotExist:
+        if not dept_id:
             messages.error(request, 'Invalid department.')
             return render(request, 'expenses/form.html', {
                 'departments': departments,
@@ -165,34 +246,120 @@ def create_expense(request):
                 'today_date': date.today().isoformat(),
             })
 
+        try:
+            dept = Department.objects.get(id=int(dept_id))
+        except (Department.DoesNotExist, ValueError, TypeError):
+            messages.error(request, 'Invalid department.')
+            return render(request, 'expenses/form.html', {
+                'departments': departments,
+                'profile': profile,
+                'action': 'create',
+                'today_date': date.today().isoformat(),
+            })
+
+        if not request_date:
+            messages.error(request, 'Please select a valid date.')
+            return render(request, 'expenses/form.html', {
+                'departments': departments,
+                'profile': profile,
+                'action': 'create',
+                'today_date': date.today().isoformat(),
+            })
+
+        budget_choice = request.POST.get('budget_choice', 'BK')
+        valid_budget_choices = [choice[0] for choice in ExpenseRequest.BUDGET_CHOICES]
+        if budget_choice not in valid_budget_choices:
+            budget_choice = 'BK'
+
+        contribution_id = request.POST.get('contribution') or None
+
         total = 0
         items_data = []
         for i, (desc, amt) in enumerate(zip(descriptions, amounts)):
             desc = desc.strip()
-            if desc:
-                try:
-                    amt_val = float(amt) if amt else 0
-                    if amt_val < 0:
-                        messages.error(request, 'Item amounts cannot be negative.')
-                        return redirect(request.path)
-                    total += amt_val
-                    items_data.append((desc, amt_val, i))
-                except ValueError:
-                    messages.error(request, 'Invalid amount value. Please enter a valid number.')
-                    return redirect(request.path)
+            amt_str = amt.strip()
+            if desc == '' and amt_str == '':
+                continue
+            if desc == '' and amt_str != '':
+                messages.error(request, 'Please enter a description for every item amount.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'profile': profile,
+                    'action': 'create',
+                    'today_date': date.today().isoformat(),
+                })
+            if desc != '' and amt_str == '':
+                messages.error(request, 'Please enter an amount for every item description.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'profile': profile,
+                    'action': 'create',
+                    'today_date': date.today().isoformat(),
+                })
+            try:
+                amt_val = float(amt_str)
+                if amt_val < 0:
+                    messages.error(request, 'Item amounts cannot be negative.')
+                    return render(request, 'expenses/form.html', {
+                        'departments': departments,
+                        'profile': profile,
+                        'action': 'create',
+                        'today_date': date.today().isoformat(),
+                    })
+                total += amt_val
+                items_data.append((desc, amt_val, i))
+            except ValueError:
+                messages.error(request, 'Invalid amount value. Please enter a valid number.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'profile': profile,
+                    'action': 'create',
+                    'today_date': date.today().isoformat(),
+                })
+
+        if not items_data:
+            messages.error(request, 'Please add at least one expense item with both description and amount.')
+            return render(request, 'expenses/form.html', {
+                'departments': departments,
+                'profile': profile,
+                'action': 'create',
+                'today_date': date.today().isoformat(),
+            })
 
         with transaction.atomic():
-            expense = ExpenseRequest.objects.create(
-                submitted_by=request.user,
-                first_name=first_name,
-                last_name=last_name,
-                phone_number=phone,
-                department=dept,
-                date=request_date,
-                reason=reason,
-                total_amount=total,
-                status='draft',
-            )
+            try:
+                expense = ExpenseRequest.objects.create(
+                    submitted_by=request.user,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=phone,
+                    department=dept,
+                    date=request_date,
+                    reason=reason,
+                    total_amount=total,
+                    budget_choice=budget_choice,
+                    contribution_id=contribution_id,
+                    status='draft',
+                )
+            except IntegrityError:
+                logger.exception('Failed to create expense draft for user %s', request.user.id)
+                messages.error(request, 'Unable to save draft right now. Please try again.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'profile': profile,
+                    'action': 'create',
+                    'today_date': date.today().isoformat(),
+                })
+            except Exception:
+                logger.exception('Unexpected error while creating expense draft for user %s', request.user.id)
+                messages.error(request, 'An unexpected error occurred. Please try again.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'profile': profile,
+                    'action': 'create',
+                    'today_date': date.today().isoformat(),
+                })
+
             for desc, amt, order in items_data:
                 ExpenseItem.objects.create(
                     expense_request=expense,
@@ -207,6 +374,11 @@ def create_expense(request):
     today_date = date.today().isoformat()
     second_approver = Approver.objects.filter(level='second', is_active=True).select_related('user').first()
     treasurer = Treasurer.objects.filter(is_active=True).select_related('user').first()
+    # Provide budget summary for the user's department (for "New Form" Budget section)
+    dept_budget = None
+    if profile.department:
+        dept_budget = _compute_department_budget_summary(profile.department)
+
     return render(request, 'expenses/form.html', {
         'departments': departments,
         'profile': profile,
@@ -214,6 +386,7 @@ def create_expense(request):
         'today_date': today_date,
         'second_approver': second_approver,
         'treasurer': treasurer,
+        'dept_budget': dept_budget,
     })
 
 
@@ -249,8 +422,8 @@ def edit_expense(request, pk):
         amounts = request.POST.getlist('item_amount[]')
 
         try:
-            dept = Department.objects.get(id=dept_id)
-        except Department.DoesNotExist:
+            dept = Department.objects.get(id=int(dept_id))
+        except (Department.DoesNotExist, ValueError, TypeError):
             messages.error(request, 'Invalid department.')
             return render(request, 'expenses/form.html', {
                 'departments': departments, 'expense': expense, 'profile': profile, 'action': 'edit', 'today_date': date.today().isoformat(),
@@ -260,17 +433,59 @@ def edit_expense(request, pk):
         items_data = []
         for i, (desc, amt) in enumerate(zip(descriptions, amounts)):
             desc = desc.strip()
-            if desc:
-                try:
-                    amt_val = float(amt) if amt else 0
-                    if amt_val < 0:
-                        messages.error(request, 'Item amounts cannot be negative.')
-                        return redirect(request.path)
-                    total += amt_val
-                    items_data.append((desc, amt_val, i))
-                except ValueError:
-                    messages.error(request, 'Invalid amount value. Please enter a valid number.')
-                    return redirect(request.path)
+            amt_str = amt.strip()
+            if desc == '' and amt_str == '':
+                continue
+            if desc == '' and amt_str != '':
+                messages.error(request, 'Please enter a description for every item amount.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'expense': expense,
+                    'profile': profile,
+                    'action': 'edit',
+                    'today_date': date.today().isoformat(),
+                })
+            if desc != '' and amt_str == '':
+                messages.error(request, 'Please enter an amount for every item description.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'expense': expense,
+                    'profile': profile,
+                    'action': 'edit',
+                    'today_date': date.today().isoformat(),
+                })
+            try:
+                amt_val = float(amt_str)
+                if amt_val < 0:
+                    messages.error(request, 'Item amounts cannot be negative.')
+                    return render(request, 'expenses/form.html', {
+                        'departments': departments,
+                        'expense': expense,
+                        'profile': profile,
+                        'action': 'edit',
+                        'today_date': date.today().isoformat(),
+                    })
+                total += amt_val
+                items_data.append((desc, amt_val, i))
+            except ValueError:
+                messages.error(request, 'Invalid amount value. Please enter a valid number.')
+                return render(request, 'expenses/form.html', {
+                    'departments': departments,
+                    'expense': expense,
+                    'profile': profile,
+                    'action': 'edit',
+                    'today_date': date.today().isoformat(),
+                })
+
+        if not items_data:
+            messages.error(request, 'Please add at least one expense item with both description and amount.')
+            return render(request, 'expenses/form.html', {
+                'departments': departments,
+                'expense': expense,
+                'profile': profile,
+                'action': 'edit',
+                'today_date': date.today().isoformat(),
+            })
 
         with transaction.atomic():
             expense.first_name = first_name
@@ -280,6 +495,9 @@ def edit_expense(request, pk):
             expense.date = request_date
             expense.reason = reason
             expense.total_amount = total
+            expense.budget_choice = request.POST.get('budget_choice', expense.budget_choice)
+            contrib_id = request.POST.get('contribution') or None
+            expense.contribution_id = contrib_id
             expense.save()
             expense.items.all().delete()
             for desc, amt, order in items_data:
@@ -292,9 +510,14 @@ def edit_expense(request, pk):
 
     second_approver = Approver.objects.filter(level='second', is_active=True).select_related('user').first()
     treasurer = Treasurer.objects.filter(is_active=True).select_related('user').first()
+    dept_budget = None
+    if profile.department:
+        dept_budget = _compute_department_budget_summary(profile.department)
+
     return render(request, 'expenses/form.html', {
         'departments': departments, 'expense': expense, 'profile': profile, 'action': 'edit',
         'today_date': date.today().isoformat(), 'second_approver': second_approver, 'treasurer': treasurer,
+        'dept_budget': dept_budget,
     })
 
 
@@ -325,6 +548,33 @@ def submit_expense(request, pk):
     expense.status = 'submitted'
     expense.submitted_at = timezone.now()
     expense.rejection_reason = ''
+    # Validate budget availability at submission time
+    # Only allow submission if requested amount <= selected budget remaining, unless MK selected
+    dept = expense.department
+    summary = _compute_department_budget_summary(dept) if dept else None
+
+    selected_budget = expense.budget_choice
+    if selected_budget == 'BK':
+        bk_remaining = summary['bk_amount'] - summary['bk_used'] if summary else 0
+        if expense.total_amount > bk_remaining:
+            messages.error(request, 'Insufficient budget. The requested amount exceeds the available budget. Please adjust the form and submit again.')
+            return redirect('expenses:edit', pk=pk)
+    elif selected_budget == 'CONTRIBUTION':
+        if not expense.contribution:
+            messages.error(request, 'Please select a contribution as the budget source.')
+            return redirect('expenses:edit', pk=pk)
+        # find that contribution in summary
+        contrib = next((c for c in summary['contributions'] if c['id'] == expense.contribution_id), None)
+        if not contrib:
+            messages.error(request, 'Selected contribution not available. Please choose another budget source.')
+            return redirect('expenses:edit', pk=pk)
+        if expense.total_amount > contrib['remaining']:
+            messages.error(request, 'Insufficient contribution budget. The requested amount exceeds the available contribution balance. Please adjust the form and submit again.')
+            return redirect('expenses:edit', pk=pk)
+    elif selected_budget == 'MK':
+        # Add automatic comment for MK usage
+        expense.budget_note = 'Department budget is insufficient. User is requesting approval to use MK budget.'
+
     expense.save()
 
     # Notify first approvers for this department
@@ -388,6 +638,9 @@ def expense_detail(request, pk):
         can_mark_paid = True
 
     try:
+        dept_budget = None
+        if expense.department:
+            dept_budget = _compute_department_budget_summary(expense.department)
         return render(request, 'expenses/detail.html', {
             'expense': expense,
             'is_approver': is_approver,
@@ -399,6 +652,7 @@ def expense_detail(request, pk):
             'can_mark_paid': can_mark_paid,
             'can_simple_reject': can_simple_reject,
             'can_see_rejection_type': can_see_rejection_type,
+            'dept_budget': dept_budget,
         })
     except Exception as e:
         logger.exception("Error rendering expense_detail for pk=%s", pk)
@@ -453,6 +707,18 @@ def approve_expense(request, pk):
             expense.paid_by = user
             expense.status = 'paid'  # Update status to paid
             expense.save()
+            # Only record budget deduction for BK and contribution payments, not MK.
+            if expense.budget_choice != 'MK':
+                try:
+                    BudgetTransaction.objects.create(
+                        department=expense.department,
+                        contribution=expense.contribution if expense.budget_choice == 'CONTRIBUTION' else None,
+                        expense_form_number=expense.form_number,
+                        amount=expense.total_amount,
+                        transaction_type='deduction'
+                    )
+                except Exception:
+                    logger.exception('Failed to record budget transaction for %s', expense.form_number)
             send_notification(
                 expense.submitted_by,
                 f'Expense Request {expense.form_number} Paid',
@@ -569,6 +835,18 @@ def update_payment(request, pk):
             expense.paid_by = user
             expense.status = 'paid'
             expense.save()
+            # Only record budget deduction for BK and contribution payments, not MK.
+            if expense.budget_choice != 'MK':
+                try:
+                    BudgetTransaction.objects.create(
+                        department=expense.department,
+                        contribution=expense.contribution if expense.budget_choice == 'CONTRIBUTION' else None,
+                        expense_form_number=expense.form_number,
+                        amount=expense.total_amount,
+                        transaction_type='deduction'
+                    )
+                except Exception:
+                    logger.exception('Failed to record budget transaction for %s', expense.form_number)
             
             send_notification(
                 expense.submitted_by,

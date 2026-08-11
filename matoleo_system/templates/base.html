@@ -96,9 +96,7 @@
       <div class="topbar-right">
         <a href="{% url 'core:notifications' %}" class="notif-btn">
           <i class="fas fa-bell"></i>
-          {% if unread_notifications_count > 0 %}
-          <span class="notif-count">{{ unread_notifications_count }}</span>
-          {% endif %}
+          <span class="notif-count">{{ unread_notifications_count|default:0 }}</span>
         </a>
         <span style="font-size:0.82rem; color:rgba(255,255,255,0.6);">
           {{ user.get_full_name|default:user.username }}
@@ -110,7 +108,7 @@
     {% if messages %}
     <div style="padding: 12px 24px 0;" id="alertContainer">
       {% for message in messages %}
-      <div class="alert alert-{{ message.tags }}">
+      <div class="alert alert-{{ message.tags }}" style="transition: opacity 0.3s ease;">
         <i class="fas fa-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' or message.tags == 'danger' %}exclamation-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
         {{ message }}
       </div>
@@ -145,6 +143,25 @@
 {% endif %}
 
 <script src="{% static 'js/main.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var alertContainer = document.getElementById('alertContainer');
+  if (!alertContainer) return;
+
+  var alerts = alertContainer.querySelectorAll('.alert');
+  alerts.forEach(function (alert) {
+    alert.style.opacity = '1';
+    window.setTimeout(function () {
+      alert.style.opacity = '0';
+      window.setTimeout(function () {
+        if (alert.parentNode) {
+          alert.remove();
+        }
+      }, 300);
+    }, 60000);
+  });
+});
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

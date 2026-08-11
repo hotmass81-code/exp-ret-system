@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import IntegrityError, models
 from django.contrib.auth.models import User
 from core.models import Department
 
@@ -24,6 +24,15 @@ class ExpenseRequest(models.Model):
     date = models.DateField()
     reason = models.TextField()
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    # Budgeting fields
+    BUDGET_CHOICES = [
+        ('BK', 'BK'),
+        ('CONTRIBUTION', 'Contribution'),
+        ('MK', 'MK'),
+    ]
+    budget_choice = models.CharField(max_length=20, choices=BUDGET_CHOICES, default='BK')
+    contribution = models.ForeignKey('core.Contribution', on_delete=models.SET_NULL, null=True, blank=True)
+    budget_note = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
 
     # Approval tracking
@@ -76,10 +85,25 @@ class ExpenseRequest(models.Model):
         if not self.form_number:
             import datetime
             year = datetime.date.today().year
-            count = ExpenseRequest.objects.filter(
-                created_at__year=year
-            ).count() + 1
-            self.form_number = f"EXP-{year}-{count:04d}"
+            prefix = f"EXP-{year}-"
+            existing = ExpenseRequest.objects.filter(form_number__startswith=prefix).values_list('form_number', flat=True)
+            max_count = 0
+            for form in existing:
+                try:
+                    count_part = int(form.rsplit('-', 1)[-1])
+                    if count_part > max_count:
+                        max_count = count_part
+                except (IndexError, ValueError):
+                    continue
+            count = max_count + 1
+
+            while count <= 9999:
+                self.form_number = f"{prefix}{count:04d}"
+                try:
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    count += 1
+            raise IntegrityError('Unable to generate a unique ExpenseRequest form_number.')
         super().save(*args, **kwargs)
 
     def get_approval_ticks(self):

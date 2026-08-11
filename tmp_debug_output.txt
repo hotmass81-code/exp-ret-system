@@ -1,0 +1,19 @@
+ERROR 2026-08-10 15:20:52,157 log 31900 31232 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "D:\System\matumizi_system\.venv\Lib\site-packages\django\core\handlers\exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\System\matumizi_system\.venv\Lib\site-packages\django\utils\deprecation.py", line 308, in __call__
+    response = self.process_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\System\matumizi_system\.venv\Lib\site-packages\django\middleware\common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "D:\System\matumizi_system\.venv\Lib\site-packages\django\http\request.py", line 205, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+logged_in True
+status_code 400
+redirected None
+content b'<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta http-equiv="content-type" content="text/html; charset=utf-8">\n  <meta name="robots" content="NONE,NOARCHIVE">\n  <title>DisallowedHost\n          at /expenses/new/</title>\n  <style>\n    html * { padding:0; margin:0; }\n    body * { padding:10px 20px; }\n    body * * { padding:0; }\n    body { font-family: sans-serif; background-color:#fff; color:#000; }\n    body > :where(header, main, footer) { border-bottom:1px solid #ddd; }\n    h1 { font-weight:normal; }\n    h2 { margin-bottom:.8em; }\n    h3 { margin:1em 0 .5em 0; }\n    h4 { margin:0 0 .5em 0; font-weight: normal; }\n    code, pre { font-size: 100%; white-space: pre-wrap; word-break: break-word; }\n    summary { cursor: pointer; }\n    table { border:1px solid #ccc; border-collapse: collapse; width:100%; background:white; }\n    tbody td, tbody th { vertical-align:top; padding:2px 3px; }\n    thead th {\n      padding:1px 6px 1px 3px; background:#fefefe; text-align:left;\n      font-weight:normal; '
+cookies Set-Cookie: sessionid=u1glns12ykadmh7wgywu8lky0rjcnwuk; Domain=None; expires=None; Max-Age=None; Path=/

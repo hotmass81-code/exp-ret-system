@@ -31,6 +31,48 @@ class Department(models.Model):
         return self.name
 
 
+class DepartmentBudget(models.Model):
+    """Tracks the base BK budget and optional MK flag for a department."""
+    department = models.OneToOneField(Department, on_delete=models.CASCADE, related_name='budget')
+    bk_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    mk_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Budget for {self.department.name}"
+
+
+class Contribution(models.Model):
+    """Additional department-specific budgets (max 4 per department)."""
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='contributions')
+    name = models.CharField(max_length=100)
+    amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('department', 'name')
+
+    def __str__(self):
+        return f"{self.name} ({self.department.name})"
+
+
+class BudgetTransaction(models.Model):
+    """Records budget deductions (created when approved/paid)."""
+    TRANSACTION_TYPE = [
+        ('deduction', 'Deduction'),
+    ]
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='budget_transactions')
+    contribution = models.ForeignKey(Contribution, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
+    expense_form_number = models.CharField(max_length=50, blank=True)
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE, default='deduction')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.transaction_type} {self.amount} for {self.department.name}"
+
+
 class Approver(models.Model):
     APPROVER_LEVEL_CHOICES = [
         ('first', 'First Approver'),
