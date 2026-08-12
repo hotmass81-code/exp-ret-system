@@ -134,6 +134,7 @@ def expense_dashboard(request):
             'date_to': end_date,
             'dept_budget': dept_budget,
             'profile': profile,
+            'user': request.user,
         })
     except Exception as exc:
         logger.exception('Unexpected error rendering expense dashboard: %s', exc)
@@ -150,6 +151,7 @@ def expense_dashboard(request):
             'date_to': timezone.localdate(),
             'dept_budget': None,
             'profile': None,
+            'user': request.user,
         })
 
 

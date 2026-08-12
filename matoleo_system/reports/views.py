@@ -35,6 +35,7 @@ def expenses_report(request):
         is_admin = user.is_staff or user.is_superuser
         is_treasurer = hasattr(user, 'treasurer_profile')
         is_approver = hasattr(user, 'approver_profile')
+        approver = None
         if is_admin or is_treasurer:
             qs = ExpenseRequest.objects.all()
         elif is_approver:
@@ -80,7 +81,7 @@ def expenses_report(request):
         expense_total = qs.aggregate(total=Coalesce(Sum('total_amount'), Value(0), output_field=DecimalField()))['total']
 
         departments = Department.objects.all()
-        if is_approver and approver.level == 'first':
+        if is_approver and not is_admin and not is_treasurer and approver and approver.level == 'first':
             departments = approver.departments.all()
 
         return render(request, 'reports/expenses.html', {
@@ -88,6 +89,7 @@ def expenses_report(request):
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
         'is_approver': is_approver,
+        'user': request.user,
         'departments': departments,
         'status_choices': status_choices,
         'status_filter': status_filter,
@@ -107,6 +109,8 @@ def expenses_report(request):
             'expenses': [],
             'is_admin': False,
             'is_treasurer': False,
+            'is_approver': False,
+            'user': request.user,
             'departments': Department.objects.none(),
             'status_choices': ExpenseRequest.STATUS_CHOICES,
             'status_filter': '',
@@ -127,6 +131,7 @@ def retirement_report(request):
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')
     is_approver = hasattr(user, 'approver_profile')
+    approver = None
     if is_admin or is_treasurer:
         qs = RetirementForm.objects.all()
     elif is_approver:
@@ -169,7 +174,7 @@ def retirement_report(request):
         retirement_total = qs.aggregate(total=Coalesce(Sum('remaining_amount'), Value(0), output_field=DecimalField()))['total']
 
         departments = Department.objects.all()
-        if is_approver and approver.level == 'first':
+        if is_approver and not is_admin and not is_treasurer and approver and approver.level == 'first':
             departments = approver.departments.all()
 
         return render(request, 'reports/retirement.html', {
@@ -177,6 +182,7 @@ def retirement_report(request):
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
         'is_approver': is_approver,
+        'user': request.user,
         'departments': departments,
         'status_choices': status_choices,
         'status_filter': status_filter,
@@ -195,6 +201,8 @@ def retirement_report(request):
             'retirements': [],
             'is_admin': False,
             'is_treasurer': False,
+            'is_approver': False,
+            'user': request.user,
             'departments': Department.objects.none(),
             'status_choices': RetirementForm.STATUS_CHOICES,
             'status_filter': '',

@@ -45,7 +45,7 @@
   </div>
 </div>
 
-{% if dept_budget %}
+{% if profile and profile.department and not is_approver %}
 <!-- Budget Modal -->
 <div class="modal-overlay" id="budgetModal" style="display:none;">
   <div class="modal-box" style="width:min(98vw,1000px); max-width:98vw; min-width:auto; max-height:90vh; overflow:auto;">
