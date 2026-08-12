@@ -62,7 +62,7 @@
         <option value="unpaid" {% if payment_filter == 'unpaid' %}selected{% endif %}>Unpaid</option>
       </select>
     </div>
-    {% if is_admin or is_treasurer %}
+    {% if is_admin or is_treasurer or is_approver %}
     <div class="form-group">
       <label class="form-label"><i class="fas fa-sitemap"></i> Department</label>
       <select name="department" class="form-control">

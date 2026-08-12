@@ -34,25 +34,68 @@ def expenses_report(request):
         user = request.user
         is_admin = user.is_staff or user.is_superuser
         is_treasurer = hasattr(user, 'treasurer_profile')
-        qs = ExpenseRequest.objects.all() if (is_admin or is_treasurer) else ExpenseRequest.objects.filter(submitted_by=user)
+        is_approver = hasattr(user, 'approver_profile')
+        if is_admin or is_treasurer:
+            qs = ExpenseRequest.objects.all()
+        elif is_approver:
+            approver = user.approver_profile
+            if approver.level == 'first':
+                qs = ExpenseRequest.objects.filter(department__in=approver.departments.all())
+            else:
+                qs = ExpenseRequest.objects.all()
+        else:
+            qs = ExpenseRequest.objects.filter(submitted_by=user)
 
+        status_filter = request.GET.get('status', '').strip()
+        search = request.GET.get('search', '').strip()
+        date_from = request.GET.get('date_from', '').strip() or _default_date_range()[0]
+        date_to = request.GET.get('date_to', '').strip() or _default_date_range()[1]
+        payment_filter = request.GET.get('payment', '').strip()
+        department_id = request.GET.get('department', '').strip()
+
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(form_number__icontains=search)
+                | Q(reason__icontains=search)
+            )
+        if payment_filter == 'paid':
+            qs = qs.filter(is_paid=True)
+        elif payment_filter == 'unpaid':
+            qs = qs.filter(is_paid=False)
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+
+        qs = qs.select_related('department', 'submitted_by')
         status_choices = ExpenseRequest.STATUS_CHOICES
         approved_count = qs.filter(status__in=['approved', 'paid']).count()
         pending_count = qs.exclude(status__in=['approved', 'paid']).count()
         expense_total = qs.aggregate(total=Coalesce(Sum('total_amount'), Value(0), output_field=DecimalField()))['total']
 
+        departments = Department.objects.all()
+        if is_approver and approver.level == 'first':
+            departments = approver.departments.all()
+
         return render(request, 'reports/expenses.html', {
         'expenses': list(qs),
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
-        'departments': Department.objects.all(),
+        'is_approver': is_approver,
+        'departments': departments,
         'status_choices': status_choices,
-        'status_filter': request.GET.get('status', '').strip(),
-        'search': request.GET.get('search', '').strip(),
-        'date_from': request.GET.get('date_from', '').strip() or _default_date_range()[0],
-        'date_to': request.GET.get('date_to', '').strip() or _default_date_range()[1],
-        'payment_filter': request.GET.get('payment', '').strip(),
-        'department_id': request.GET.get('department', '').strip(),
+        'status_filter': status_filter,
+        'search': search,
+        'date_from': date_from,
+        'date_to': date_to,
+        'payment_filter': payment_filter,
+        'department_id': department_id,
         'approved_count': approved_count,
         'pending_count': pending_count,
         'expense_total': expense_total,
@@ -83,24 +126,64 @@ def retirement_report(request):
     user = request.user
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')
-    qs = RetirementForm.objects.all() if (is_admin or is_treasurer) else RetirementForm.objects.filter(submitted_by=user)
+    is_approver = hasattr(user, 'approver_profile')
+    if is_admin or is_treasurer:
+        qs = RetirementForm.objects.all()
+    elif is_approver:
+        approver = user.approver_profile
+        if approver.level == 'first':
+            qs = RetirementForm.objects.filter(department__in=approver.departments.all())
+        else:
+            qs = RetirementForm.objects.all()
+    else:
+        qs = RetirementForm.objects.filter(submitted_by=user)
 
     try:
+        status_filter = request.GET.get('status', '').strip()
+        search = request.GET.get('search', '').strip()
+        date_from = request.GET.get('date_from', '').strip() or _default_date_range()[0]
+        date_to = request.GET.get('date_to', '').strip() or _default_date_range()[1]
+        department_id = request.GET.get('department', '').strip()
+
+        if date_from:
+            qs = qs.filter(date_of_request__gte=date_from)
+        if date_to:
+            qs = qs.filter(date_of_request__lte=date_to)
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(form_number__icontains=search)
+                | Q(reason__icontains=search)
+                | Q(exp_request_form_no__icontains=search)
+            )
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+
+        qs = qs.select_related('department', 'submitted_by')
         status_choices = RetirementForm.STATUS_CHOICES
         approved_count = qs.filter(status__in=['approved', 'paid']).count()
         pending_count = qs.exclude(status__in=['approved', 'paid']).count()
         retirement_total = qs.aggregate(total=Coalesce(Sum('remaining_amount'), Value(0), output_field=DecimalField()))['total']
 
+        departments = Department.objects.all()
+        if is_approver and approver.level == 'first':
+            departments = approver.departments.all()
+
         return render(request, 'reports/retirement.html', {
         'retirements': list(qs),
         'is_admin': is_admin,
         'is_treasurer': is_treasurer,
-        'departments': Department.objects.all(),
+        'is_approver': is_approver,
+        'departments': departments,
         'status_choices': status_choices,
-        'status_filter': request.GET.get('status', '').strip(),
-        'search': request.GET.get('search', '').strip(),
-        'date_from': request.GET.get('date_from', '').strip() or _default_date_range()[0],
-        'date_to': request.GET.get('date_to', '').strip() or _default_date_range()[1],
+        'status_filter': status_filter,
+        'search': search,
+        'date_from': date_from,
+        'date_to': date_to,
+        'department_id': department_id,
         'approved_count': approved_count,
         'pending_count': pending_count,
         'retirement_total': retirement_total,
@@ -129,17 +212,47 @@ def download_expense_report(request):
     user = request.user
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')
+    is_approver = hasattr(user, 'approver_profile')
 
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
     if not request.GET:
         date_from, date_to = _default_date_range()
 
-    qs = ExpenseRequest.objects.all() if (is_admin or is_treasurer) else ExpenseRequest.objects.filter(submitted_by=user)
+    if is_admin or is_treasurer:
+        qs = ExpenseRequest.objects.all()
+    elif is_approver:
+        approver = user.approver_profile
+        if approver.level == 'first':
+            qs = ExpenseRequest.objects.filter(department__in=approver.departments.all())
+        else:
+            qs = ExpenseRequest.objects.all()
+    else:
+        qs = ExpenseRequest.objects.filter(submitted_by=user)
+    status_filter = request.GET.get('status', '').strip()
+    search = request.GET.get('search', '').strip()
+    payment_filter = request.GET.get('payment', '').strip()
+    department_id = request.GET.get('department', '').strip()
+
     if date_from:
         qs = qs.filter(date__gte=date_from)
     if date_to:
         qs = qs.filter(date__lte=date_to)
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if search:
+        qs = qs.filter(
+            Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(form_number__icontains=search)
+            | Q(reason__icontains=search)
+        )
+    if payment_filter == 'paid':
+        qs = qs.filter(is_paid=True)
+    elif payment_filter == 'unpaid':
+        qs = qs.filter(is_paid=False)
+    if department_id:
+        qs = qs.filter(department_id=department_id)
 
     # Generate Excel for all users
     try:
@@ -192,17 +305,43 @@ def download_retirement_report(request):
     user = request.user
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')
+    is_approver = hasattr(user, 'approver_profile')
 
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
     if not request.GET:
         date_from, date_to = _default_date_range()
 
-    qs = RetirementForm.objects.all() if (is_admin or is_treasurer) else RetirementForm.objects.filter(submitted_by=user)
+    if is_admin or is_treasurer:
+        qs = RetirementForm.objects.all()
+    elif is_approver:
+        approver = user.approver_profile
+        if approver.level == 'first':
+            qs = RetirementForm.objects.filter(department__in=approver.departments.all())
+        else:
+            qs = RetirementForm.objects.all()
+    else:
+        qs = RetirementForm.objects.filter(submitted_by=user)
+    status_filter = request.GET.get('status', '').strip()
+    search = request.GET.get('search', '').strip()
+    department_id = request.GET.get('department', '').strip()
+
     if date_from:
         qs = qs.filter(date_of_request__gte=date_from)
     if date_to:
         qs = qs.filter(date_of_request__lte=date_to)
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if search:
+        qs = qs.filter(
+            Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(form_number__icontains=search)
+            | Q(reason__icontains=search)
+            | Q(exp_request_form_no__icontains=search)
+        )
+    if department_id:
+        qs = qs.filter(department_id=department_id)
 
     # Generate Excel for all users
     try:
