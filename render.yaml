@@ -37,6 +37,10 @@ services:
         value: "Hot@2000"
       - key: ADMIN_EMAIL
         value: "hotmass81@gmail.com"
+      - key: DISABLE_BUDGET_MANAGEMENT
+        value: "True"
+      - key: DISABLE_EXCEL_DOWNLOAD
+        value: "True"
 
 databases:
   - name: matumiz_db

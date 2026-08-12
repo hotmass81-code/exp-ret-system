@@ -12,6 +12,7 @@ from core.models import Department
 import io
 import calendar
 from django.utils import timezone
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,8 @@ def retirement_report(request):
 
 @login_required
 def download_expense_report(request):
+    if getattr(settings, 'DISABLE_EXCEL_DOWNLOAD', False):
+        return HttpResponse('Expense Excel downloads are disabled on this deployment.', status=503)
     user = request.user
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')
@@ -310,6 +313,8 @@ def download_expense_report(request):
 
 @login_required
 def download_retirement_report(request):
+    if getattr(settings, 'DISABLE_EXCEL_DOWNLOAD', False):
+        return HttpResponse('Retirement Excel downloads are disabled on this deployment.', status=503)
     user = request.user
     is_admin = user.is_staff or user.is_superuser
     is_treasurer = hasattr(user, 'treasurer_profile')

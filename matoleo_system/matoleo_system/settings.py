@@ -180,6 +180,11 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
+# Feature flags to allow disabling optional subsystems that may cause
+# runtime failures in constrained environments (e.g. Render build/runtime).
+# Toggle via environment variables in deploy config ("1", "true", "yes").
+DISABLE_BUDGET_MANAGEMENT = os.environ.get('DISABLE_BUDGET_MANAGEMENT', 'False').lower() in ('1', 'true', 'yes')
+DISABLE_EXCEL_DOWNLOAD = os.environ.get('DISABLE_EXCEL_DOWNLOAD', 'False').lower() in ('1', 'true', 'yes')
 STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',

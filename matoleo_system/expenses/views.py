@@ -112,15 +112,22 @@ def expense_dashboard(request):
         # prepare department budget summary for the current user (for Budget button)
         dept_budget = None
         profile = None
-        try:
-            profile, _ = UserProfile.objects.get_or_create(user=request.user)
-        except Exception:
-            profile = None
-        if profile and profile.department:
+        # Allow disabling budget computations via feature flag to avoid runtime
+        # failures in environments where budget subsystems cause errors.
+        if not getattr(settings, 'DISABLE_BUDGET_MANAGEMENT', False):
             try:
-                dept_budget = _compute_department_budget_summary(profile.department)
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
             except Exception:
-                dept_budget = None
+                profile = None
+            if profile and profile.department:
+                try:
+                    dept_budget = _compute_department_budget_summary(profile.department)
+                except Exception:
+                    dept_budget = None
+        else:
+            # Feature disabled: don't compute or expose budget data
+            dept_budget = None
+            profile = None
 
         return render(request, 'expenses/dashboard.html', {
             'requests': requests,
